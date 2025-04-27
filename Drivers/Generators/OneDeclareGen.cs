@@ -14,8 +14,9 @@ public class OneDeclareGen(DbDriver dbDriver)
     {
         var returnType = $"Task<{dbDriver.AddNullableSuffixIfNeeded(returnInterface, false)}>";
         var parametersStr = CommonGen.GetMethodParameterList(argInterface, query.Params);
+        string staticKeyword = dbDriver.Options.ExternalConnection ? "static" : string.Empty;
         return ParseMemberDeclaration($$"""
-            public async {{returnType}} {{query.Name}}({{parametersStr}})
+            public {{staticKeyword}} async {{returnType}} {{query.Name}}({{parametersStr}})
             {
                 {{GetMethodBody(queryTextConstant, returnInterface, query)}}
             }
@@ -39,7 +40,13 @@ public class OneDeclareGen(DbDriver dbDriver)
             var dapperArgs = dapperParamsSection != string.Empty ? $", {Variable.QueryParams.AsVarName()}" : string.Empty;
             var returnType = dbDriver.AddNullableSuffixIfNeeded(returnInterface, false);
 
-            return $$"""
+            return dbDriver.Options.ExternalConnection
+                ? $$"""
+                        {{sqlTextTransform}}{{dapperParamsSection}}
+                            var {{resultVar}} = await {{connectionVar}}.QueryFirstOrDefaultAsync<{{returnType}}>({{queryTextConstant}}{{dapperArgs}});
+                            return {{resultVar}};
+                     """
+                : $$"""
                         using ({{establishConnection}})
                         {{{sqlTextTransform}}{{dapperParamsSection}}
                             var {{resultVar}} = await {{connectionVar}}.QueryFirstOrDefaultAsync<{{returnType}}>({{queryTextConstant}}{{dapperArgs}});
@@ -55,24 +62,39 @@ public class OneDeclareGen(DbDriver dbDriver)
             var initDataReader = CommonGen.InitDataReader();
             var awaitReaderRow = CommonGen.AwaitReaderRow();
             var returnDataclass = CommonGen.InstantiateDataclass(query.Columns.ToArray(), returnInterface);
-            return $$"""
-                     using ({{establishConnection}})
-                     {
-                         {{connectionOpen.AppendSemicolonUnlessEmpty()}}{{sqlTextTransform}}
-                         using ({{createSqlCommand}})
-                         {
-                            {{commandParameters}}
-                             using ({{initDataReader}})
-                             {
-                                 if ({{awaitReaderRow}})
-                                 {
-                                     return {{returnDataclass}};
-                                 }
-                             }
-                         }
-                     }
-                     return null;
-                     """;
+            return dbDriver.Options.ExternalConnection
+                ? $$"""
+                    using ({{createSqlCommand}})
+                    {
+                       {{commandParameters}}
+                        using ({{initDataReader}})
+                        {
+                            if ({{awaitReaderRow}})
+                            {
+                                return {{returnDataclass}};
+                            }
+                        }
+                    }
+                    return null;
+                    """
+                : $$"""
+                    using ({{establishConnection}})
+                    {
+                        {{connectionOpen.AppendSemicolonUnlessEmpty()}}{{sqlTextTransform}}
+                        using ({{createSqlCommand}})
+                        {
+                           {{commandParameters}}
+                            using ({{initDataReader}})
+                            {
+                                if ({{awaitReaderRow}})
+                                {
+                                    return {{returnDataclass}};
+                                }
+                            }
+                        }
+                    }
+                    return null;
+                    """;
         }
     }
 }

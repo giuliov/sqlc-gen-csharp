@@ -11,8 +11,9 @@ public class ExecRowsDeclareGen(DbDriver dbDriver)
     public MemberDeclarationSyntax Generate(string queryTextConstant, string argInterface, Query query)
     {
         var parametersStr = CommonGen.GetMethodParameterList(argInterface, query.Params);
+        string staticKeyword = dbDriver.Options.ExternalConnection ? "static" : string.Empty;
         return ParseMemberDeclaration($$"""
-            public async Task<long> {{query.Name}}({{parametersStr}})
+            public {{staticKeyword}} async Task<long> {{query.Name}}({{parametersStr}})
             {
                 {{GetMethodBody(queryTextConstant, query)}}
             }
@@ -29,7 +30,12 @@ public class ExecRowsDeclareGen(DbDriver dbDriver)
         {
             var dapperParamsSection = CommonGen.ConstructDapperParamsDict(query.Params);
             var dapperArgs = dapperParamsSection != string.Empty ? $", {Variable.QueryParams.AsVarName()}" : string.Empty;
-            return $$"""
+            return dbDriver.Options.ExternalConnection
+                ? $$"""
+                        {{sqlTextTransform}}{{dapperParamsSection}}
+                            return await {{Variable.Connection.AsVarName()}}.ExecuteAsync({{queryTextConstant}}{{dapperArgs}});
+                     """
+                : $$"""
                         using ({{establishConnection}})
                         {{{sqlTextTransform}}{{dapperParamsSection}}
                             return await {{Variable.Connection.AsVarName()}}.ExecuteAsync({{queryTextConstant}}{{dapperArgs}});
@@ -43,17 +49,25 @@ public class ExecRowsDeclareGen(DbDriver dbDriver)
                 ? Variable.TransformedSql.AsVarName()
                 : queryTextConstant);
             var commandParameters = CommonGen.AddParametersToCommand(query.Params);
-            return $$"""
-                     using ({{establishConnection}})
-                     {
-                         {{connectionOpen.AppendSemicolonUnlessEmpty()}}{{sqlTextTransform}}
-                         using ({{createSqlCommand}})
-                         {
-                            {{commandParameters}}
-                            return await {{Variable.Command.AsVarName()}}.ExecuteNonQueryAsync();
-                         }
-                     }
-                     """;
+            return dbDriver.Options.ExternalConnection
+                ? $$"""
+                    using ({{createSqlCommand}})
+                    {
+                       {{commandParameters}}
+                       return await {{Variable.Command.AsVarName()}}.ExecuteNonQueryAsync();
+                    }
+                    """
+                : $$"""
+                    using ({{establishConnection}})
+                    {
+                        {{connectionOpen.AppendSemicolonUnlessEmpty()}}{{sqlTextTransform}}
+                        using ({{createSqlCommand}})
+                        {
+                           {{commandParameters}}
+                           return await {{Variable.Command.AsVarName()}}.ExecuteNonQueryAsync();
+                        }
+                    }
+                    """;
         }
     }
 }

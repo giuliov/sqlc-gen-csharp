@@ -1,4 +1,5 @@
 using Plugin;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -6,11 +7,17 @@ namespace SqlcGenCsharp.Drivers.Generators;
 
 public class CommonGen(DbDriver dbDriver)
 {
-    public static string GetMethodParameterList(string argInterface, IEnumerable<Parameter> parameters)
+    public string GetMethodParameterList(string argInterface, IEnumerable<Parameter> parameters)
     {
-        return $"{(string.IsNullOrEmpty(argInterface) || !parameters.Any()
-            ? string.Empty
-            : $"{argInterface} {Variable.Args.AsVarName()}")}";
+        return string.IsNullOrEmpty(argInterface) || !parameters.Any()
+            ? // no other params
+            (dbDriver.Options.ExternalConnection
+                ? $"{dbDriver.ConnectionTypeName} {Variable.Connection.AsVarName()}"
+                : String.Empty)
+            : // we have params
+            (dbDriver.Options.ExternalConnection
+                ? $"{dbDriver.ConnectionTypeName} {Variable.Connection.AsVarName()}, {argInterface} {Variable.Args.AsVarName()}"
+                : $"{argInterface} {Variable.Args.AsVarName()}");
     }
 
     public static string AddParametersToCommand(IEnumerable<Parameter> parameters)

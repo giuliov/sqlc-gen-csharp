@@ -24,4 +24,7 @@ internal class RawOptions
 
     [JsonPropertyName("debugRequest")]
     public bool DebugRequest { get; init; }
+
+    [JsonPropertyName("externalConnection")]
+    public bool ExternalConnection { get; init; }
 }

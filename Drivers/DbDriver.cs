@@ -208,6 +208,8 @@ public abstract class DbDriver
 
     public abstract string TransformQueryText(Query query);
 
+    public abstract string ConnectionTypeName { get; }
+    
     public abstract ConnectionGenCommands EstablishConnection(Query query);
 
     public abstract string CreateSqlCommand(string sqlTextConstant);

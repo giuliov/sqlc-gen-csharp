@@ -19,6 +19,7 @@ public class Options
         UseDapper = rawOptions.UseDapper;
         OverrideDapperVersion = rawOptions.OverrideDapperVersion;
         NamespaceName = rawOptions.NamespaceName;
+        ExternalConnection = rawOptions.ExternalConnection;
         DotnetFramework = DotnetFrameworkExtensions.ParseName(rawOptions.TargetFramework);
 
         if (rawOptions.DebugRequest && generateRequest.Settings.Codegen.Wasm is not null)
@@ -41,6 +42,8 @@ public class Options
     public string NamespaceName { get; }
 
     public bool DebugRequest { get; }
+    
+    public bool ExternalConnection { get; }
 
     private static readonly Dictionary<string, DriverName> EngineToDriverMapping = new()
     {

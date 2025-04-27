@@ -11,8 +11,9 @@ public class ExecLastIdDeclareGen(DbDriver dbDriver)
     public MemberDeclarationSyntax Generate(string queryTextConstant, string argInterface, Query query)
     {
         var parametersStr = CommonGen.GetMethodParameterList(argInterface, query.Params);
+        string staticKeyword = dbDriver.Options.ExternalConnection ? "static" : string.Empty;
         return ParseMemberDeclaration($$"""
-            public async Task<{{dbDriver.GetIdColumnType(query)}}> {{query.Name}}({{parametersStr}})
+            public {{staticKeyword}} async Task<{{dbDriver.GetIdColumnType(query)}}> {{query.Name}}({{parametersStr}})
             {
                 {{GetMethodBody(queryTextConstant, query)}}
             }
@@ -23,7 +24,6 @@ public class ExecLastIdDeclareGen(DbDriver dbDriver)
     {
         var (establishConnection, connectionOpen) = dbDriver.EstablishConnection(query);
         var sqlTextTransform = CommonGen.GetSqlTransformations(query, queryTextConstant);
-        connectionOpen = connectionOpen.AppendSemicolonUnlessEmpty();
         return dbDriver.Options.UseDapper ? GetAsDapper() : GetAsDriver();
 
         string GetAsDapper()
@@ -32,7 +32,12 @@ public class ExecLastIdDeclareGen(DbDriver dbDriver)
             var dapperArgs = dapperParamsSection == string.Empty
                 ? string.Empty
                 : $", {Variable.QueryParams.AsVarName()}";
-            return $$"""
+            return dbDriver.Options.ExternalConnection
+                 ? $$"""
+                     {{sqlTextTransform}}{{dapperParamsSection}}
+                        return await {{Variable.Connection.AsVarName()}}.QuerySingleAsync<{{dbDriver.GetIdColumnType(query)}}>({{queryTextConstant}}{{dapperArgs}});
+                     """
+                 : $$"""
                      using ({{establishConnection}})
                      {{{sqlTextTransform}}{{dapperParamsSection}}
                         return await {{Variable.Connection.AsVarName()}}.QuerySingleAsync<{{dbDriver.GetIdColumnType(query)}}>({{queryTextConstant}}{{dapperArgs}});
@@ -46,17 +51,25 @@ public class ExecLastIdDeclareGen(DbDriver dbDriver)
             var createSqlCommand = dbDriver.CreateSqlCommand(sqlTextVar);
             var commandParameters = CommonGen.AddParametersToCommand(query.Params);
             var returnLastId = ((IExecLastId)dbDriver).GetLastIdStatement(query).JoinByNewLine();
-            return $$"""
-                     using ({{establishConnection}})
-                     {
-                         {{connectionOpen}}{{sqlTextTransform}}
-                         using ({{createSqlCommand}})
-                         {
-                            {{commandParameters}}
-                            {{returnLastId}}
-                         }
-                     }
-                     """;
+            return dbDriver.Options.ExternalConnection
+                ? $$"""
+                    using ({{createSqlCommand}})
+                    {
+                       {{commandParameters}}
+                       {{returnLastId}}
+                    }
+                    """
+                : $$"""
+                    using ({{establishConnection}})
+                    {
+                        {{connectionOpen.AppendSemicolonUnlessEmpty()}}{{sqlTextTransform}}
+                        using ({{createSqlCommand}})
+                        {
+                           {{commandParameters}}
+                           {{returnLastId}}
+                        }
+                    }
+                    """;
         }
     }
 }

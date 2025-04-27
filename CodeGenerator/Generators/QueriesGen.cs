@@ -56,17 +56,22 @@ internal class QueriesGen(DbDriver dbDriver, string namespaceName)
 
     private ClassDeclarationSyntax GetClassDeclaration(string className, IEnumerable<MemberDeclarationSyntax> classMembers)
     {
-        var classDeclaration = (ClassDeclarationSyntax)ParseMemberDeclaration(
-                $$"""
-                  public class {{className}}
-                  {
-                      public {{className}}(string {{Variable.ConnectionString.AsVarName()}})
-                      {
-                          {{dbDriver.GetConstructorStatements().JoinByNewLine()}}
-                      }
-                      private string {{Variable.ConnectionString.AsPropertyName()}} { get; }
-                  }
-                  """)!;
+        string text = dbDriver.Options.ExternalConnection
+            ? $$"""
+                public static class {{className}} {}
+                """
+            : $$"""
+                public class {{className}}
+                {
+                    public {{className}}(string {{Variable.ConnectionString.AsVarName()}})
+                    {
+                        {{dbDriver.GetConstructorStatements().JoinByNewLine()}}
+                    }
+                    private string {{Variable.ConnectionString.AsPropertyName()}} { get; }
+                }
+                """;
+        
+        var classDeclaration = (ClassDeclarationSyntax)ParseMemberDeclaration(text)!;
         return classDeclaration.AddMembers(classMembers.ToArray());
     }
 

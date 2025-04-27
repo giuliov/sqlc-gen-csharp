@@ -234,6 +234,8 @@ public partial class MySqlConnectorDriver(
         return QueryParamRegex().Replace(queryText, _ => "@" + query.Params[counter++].Column.Name);
     }
 
+    public override string ConnectionTypeName { get; } = "MySqlConnection";
+
     [GeneratedRegex(@"\?")]
     private static partial Regex QueryParamRegex();
 

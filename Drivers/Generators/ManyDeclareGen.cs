@@ -14,8 +14,9 @@ public class ManyDeclareGen(DbDriver dbDriver)
     {
         var parametersStr = CommonGen.GetMethodParameterList(argInterface, query.Params);
         var returnType = $"Task<List<{returnInterface}>>";
+        string staticKeyword = dbDriver.Options.ExternalConnection ? "static" : string.Empty;
         return ParseMemberDeclaration($$"""
-            public async {{returnType}} {{query.Name}}({{parametersStr}})
+            public {{staticKeyword}} async {{returnType}} {{query.Name}}({{parametersStr}})
             {
                 {{GetMethodBody(queryTextConstant, returnInterface, query)}}
             }
@@ -39,7 +40,13 @@ public class ManyDeclareGen(DbDriver dbDriver)
             var returnType = dbDriver.AddNullableSuffixIfNeeded(returnInterface, true);
             var sqlQuery = sqlTextTransform != string.Empty ? Variable.TransformedSql.AsVarName() : queryTextConstant;
 
-            return $$"""
+            return dbDriver.Options.ExternalConnection
+                ? $$"""
+                        {{sqlTextTransform}}{{dapperParamsSection}}
+                            var {{resultVar}} = await {{Variable.Connection.AsVarName()}}.QueryAsync<{{returnType}}>({{sqlQuery}}{{dapperArgs}});
+                            return {{resultVar}}.AsList();
+                     """
+                : $$"""
                         using ({{establishConnection}})
                         {{{sqlTextTransform}}{{dapperParamsSection}}
                             var {{resultVar}} = await {{Variable.Connection.AsVarName()}}.QueryAsync<{{returnType}}>({{sqlQuery}}{{dapperArgs}});
@@ -61,22 +68,35 @@ public class ManyDeclareGen(DbDriver dbDriver)
                                         {{resultVar}}.Add({{dataclassInit}});
                                     }
                                     """;
-            return $$"""
-                     using ({{establishConnection}})
-                     {
-                         {{connectionOpen.AppendSemicolonUnlessEmpty()}}{{sqlTextTransform}}
-                         using ({{createSqlCommand}})
-                         {
-                             {{commandParameters}}
-                             using ({{initDataReader}})
-                             {
-                                 var {{resultVar}} = new List<{{returnInterface}}>();
-                                 {{readWhileExists}}
-                                 return {{resultVar}};
-                             }
-                         }
-                     }
-                     """;
+            return dbDriver.Options.ExternalConnection
+                ? $$"""
+                    using ({{createSqlCommand}})
+                    {
+                        {{commandParameters}}
+                        using ({{initDataReader}})
+                        {
+                            var {{resultVar}} = new List<{{returnInterface}}>();
+                            {{readWhileExists}}
+                            return {{resultVar}};
+                        }
+                    }
+                    """
+                : $$"""
+                    using ({{establishConnection}})
+                    {
+                        {{connectionOpen.AppendSemicolonUnlessEmpty()}}{{sqlTextTransform}}
+                        using ({{createSqlCommand}})
+                        {
+                            {{commandParameters}}
+                            using ({{initDataReader}})
+                            {
+                                var {{resultVar}} = new List<{{returnInterface}}>();
+                                {{readWhileExists}}
+                                return {{resultVar}};
+                            }
+                        }
+                    }
+                    """;
         }
     }
 }

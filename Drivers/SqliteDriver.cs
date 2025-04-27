@@ -111,6 +111,8 @@ public partial class SqliteDriver(
         return transformedQueryText;
     }
 
+    public override string ConnectionTypeName { get; } = "SqliteConnection";
+
     [GeneratedRegex(@"\?\d*")]
     private static partial Regex QueryParamRegex();
 
@@ -155,18 +157,27 @@ public partial class SqliteDriver(
         var createSqlCommand = CreateSqlCommand(sqlTextVar);
         var executeScalar = $"await {Variable.Command.AsVarName()}.ExecuteScalarAsync();";
 
-        return $$"""
-                 using ({{establishConnection}})
-                 {
-                     {{connectionOpen.AppendSemicolonUnlessEmpty()}}
-                     {{sqlTransformation}}
-                     using ({{createSqlCommand}})
-                     {
-                         {{commandParameters}}
-                         {{executeScalar}}
-                     }
-                 }
-                 """;
+        return options.ExternalConnection
+            ? $$"""
+                {{sqlTransformation}}
+                using ({{createSqlCommand}})
+                {
+                    {{commandParameters}}
+                    {{executeScalar}}
+                }
+                """
+            : $$"""
+                using ({{establishConnection}})
+                {
+                    {{connectionOpen.AppendSemicolonUnlessEmpty()}}
+                    {{sqlTransformation}}
+                    using ({{createSqlCommand}})
+                    {
+                        {{commandParameters}}
+                        {{executeScalar}}
+                    }
+                }
+                """;
 
         string AddParametersToCommand()
         {

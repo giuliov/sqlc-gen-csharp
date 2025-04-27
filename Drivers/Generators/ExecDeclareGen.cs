@@ -11,8 +11,9 @@ public class ExecDeclareGen(DbDriver dbDriver)
     public MemberDeclarationSyntax Generate(string queryTextConstant, string argInterface, Query query)
     {
         var parametersStr = CommonGen.GetMethodParameterList(argInterface, query.Params);
+        string staticKeyword = dbDriver.Options.ExternalConnection ? "static" : string.Empty;
         return ParseMemberDeclaration($$"""
-            public async Task {{query.Name}}({{parametersStr}})
+            public {{staticKeyword}} async Task {{query.Name}}({{parametersStr}})
             {
                 {{GetMethodBody(queryTextConstant, query)}}
             }
@@ -31,12 +32,17 @@ public class ExecDeclareGen(DbDriver dbDriver)
             var dapperArgs = dapperParamsSection != string.Empty
                 ? $", {Variable.QueryParams.AsVarName()}"
                 : string.Empty;
-            return $$"""
-                        using ({{establishConnection}})
-                        {{{sqlTextTransform}}{{dapperParamsSection}}
-                            await {{Variable.Connection.AsVarName()}}.ExecuteAsync({{queryTextConstant}}{{dapperArgs}});
-                        }
-                     """;
+            return dbDriver.Options.ExternalConnection
+                ? $$"""
+                       {{sqlTextTransform}}{{dapperParamsSection}}
+                           await {{Variable.Connection.AsVarName()}}.ExecuteAsync({{queryTextConstant}}{{dapperArgs}});
+                    """
+                : $$"""
+                      using ({{establishConnection}})
+                      {{{sqlTextTransform}}{{dapperParamsSection}}
+                          await {{Variable.Connection.AsVarName()}}.ExecuteAsync({{queryTextConstant}}{{dapperArgs}});
+                      }
+                   """;
         }
 
         string GetAsDriver()
@@ -44,17 +50,26 @@ public class ExecDeclareGen(DbDriver dbDriver)
             var commandParameters = CommonGen.AddParametersToCommand(query.Params);
             var createSqlCommand = dbDriver.CreateSqlCommand(sqlTextTransform != string.Empty ? Variable.TransformedSql.AsVarName() : queryTextConstant);
             var executeScalar = $"await {Variable.Command.AsVarName()}.ExecuteScalarAsync();";
-            return $$"""
-                     using ({{establishConnection}})
-                     {
-                         {{connectionOpen.AppendSemicolonUnlessEmpty()}}{{sqlTextTransform}}
-                         using ({{createSqlCommand}})
-                         {
-                             {{commandParameters}}
-                             {{executeScalar}}
-                         }
-                     }
-                     """;
+            return dbDriver.Options.ExternalConnection
+                ? $$"""
+                    {{sqlTextTransform}}
+                    using ({{createSqlCommand}})
+                    {
+                        {{commandParameters}}
+                        {{executeScalar}}
+                    }
+                    """
+                : $$"""
+                    using ({{establishConnection}})
+                    {
+                        {{connectionOpen.AppendSemicolonUnlessEmpty()}}{{sqlTextTransform}}
+                        using ({{createSqlCommand}})
+                        {
+                            {{commandParameters}}
+                            {{executeScalar}}
+                        }
+                    }
+                    """;
         }
     }
 }

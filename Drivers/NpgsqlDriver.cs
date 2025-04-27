@@ -299,6 +299,8 @@ public class NpgsqlDriver : DbDriver, IOne, IMany, IExec, IExecRows, IExecLastId
         }
     }
 
+    public override string ConnectionTypeName { get; } = "NpgsqlConnection";
+
     public MemberDeclarationSyntax OneDeclare(string queryTextConstant, string argInterface,
         string returnInterface, Query query)
     {
